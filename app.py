@@ -4,21 +4,25 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import json
 import matplotlib.pyplot as plt
+import warnings
+
+# Suppress irrelevant warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Load API Key from Streamlit Secrets
 FMP_API_KEY = st.secrets["FMP_API_KEY"]
 
-# Load FinBERT Model
+# Load Longformer Model (for long-text sentiment analysis)
 @st.cache_resource
-def load_finbert():
-    model_name = "yiyanghkust/finbert-tone"
+def load_longformer():
+    model_name = "jpwahle/longformer-base-pln-sentiment"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSequenceClassification.from_pretrained(model_name)
     return tokenizer, model
 
-tokenizer, model = load_finbert()
+tokenizer, model = load_longformer()
 
-# Function to fetch the latest earnings transcript
+# Function to fetch full earnings transcript
 def fetch_earnings_transcript(symbol):
     url = f"https://financialmodelingprep.com/api/v3/earning_call_transcript/{symbol}?apikey={FMP_API_KEY}"
     response = requests.get(url)
@@ -27,17 +31,14 @@ def fetch_earnings_transcript(symbol):
         transcripts = response.json()
         if transcripts:
             content = transcripts[0]["content"]
-
-            # Remove first 3 lines (legal disclaimers)
-            filtered_content = "\n".join(content.split("\n")[3:])
-
+            # Remove first 5 lines (disclaimers, legal intro)
+            filtered_content = "\n".join(content.split("\n")[5:])
             return filtered_content
     return None
 
-# Function to analyze sentiment with FinBERT
+# Function to analyze sentiment with Longformer
 def analyze_sentiment(text):
-    truncated_text = text[:512]  # Ensure text fits within FinBERT's limit
-    inputs = tokenizer(truncated_text, return_tensors="pt", truncation=True, max_length=512)
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=4096)
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -48,7 +49,7 @@ def analyze_sentiment(text):
     return {labels[i]: scores[0][i].item() for i in range(len(labels))}
 
 # Streamlit UI
-st.title("📈 Earnings Transcript Sentiment Analyzer")
+st.title("📈 Earnings Transcript Sentiment Analyzer (Longformer)")
 
 symbol = st.text_input("Enter Stock Ticker (e.g., AAPL, TSLA):").upper()
 
