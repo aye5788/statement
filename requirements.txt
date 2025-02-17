@@ -1,5 +1,5 @@
 streamlit
 requests
-torch
-transformers
+torch==2.0.1
+transformers==4.36.0
 matplotlib
