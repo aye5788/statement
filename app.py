@@ -3,6 +3,7 @@ import requests
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import json
+import matplotlib.pyplot as plt
 
 # Load API Key from Streamlit Secrets
 FMP_API_KEY = st.secrets["FMP_API_KEY"]
@@ -21,20 +22,29 @@ tokenizer, model = load_finbert()
 def fetch_earnings_transcript(symbol):
     url = f"https://financialmodelingprep.com/api/v3/earning_call_transcript/{symbol}?apikey={FMP_API_KEY}"
     response = requests.get(url)
-    
+
     if response.status_code == 200:
         transcripts = response.json()
         if transcripts:
-            return transcripts[0]["content"]  # Extract latest transcript
+            content = transcripts[0]["content"]
+
+            # Remove first 3 lines (legal disclaimers)
+            filtered_content = "\n".join(content.split("\n")[3:])
+
+            return filtered_content
     return None
 
 # Function to analyze sentiment with FinBERT
 def analyze_sentiment(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    truncated_text = text[:512]  # Ensure text fits within FinBERT's limit
+    inputs = tokenizer(truncated_text, return_tensors="pt", truncation=True, max_length=512)
+
     with torch.no_grad():
         outputs = model(**inputs)
+
     scores = torch.nn.functional.softmax(outputs.logits, dim=1)
     labels = ["Negative", "Neutral", "Positive"]
+
     return {labels[i]: scores[0][i].item() for i in range(len(labels))}
 
 # Streamlit UI
@@ -59,8 +69,6 @@ if st.button("Analyze Transcript"):
             st.json(sentiment_scores)
 
             # Pie Chart Visualization
-            import matplotlib.pyplot as plt
-
             labels = sentiment_scores.keys()
             sizes = sentiment_scores.values()
             fig, ax = plt.subplots()
@@ -71,3 +79,4 @@ if st.button("Analyze Transcript"):
             st.error("No transcript found for this ticker. Try another symbol.")
     else:
         st.warning("Please enter a stock ticker.")
+
